@@ -12,6 +12,7 @@ import { parseGitHubError } from '@/lib/github/errors'
 const deployRequestSchema = z.object({
   githubUrl: z.string().url('Invalid GitHub URL'),
   filePath: z.string().min(1, 'File path is required').regex(/\.py$/, 'File must be a Python file (.py)'),
+  functionName: z.string().min(1, 'Function name is required').regex(/^[a-zA-Z_]\w*$/, 'Invalid function name'),
   token: z.string().optional(),
   envVars: z.record(z.string(), z.string()).optional(),
 })
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { githubUrl, filePath, token, envVars } = validation.data
+    const { githubUrl, filePath, functionName, token, envVars } = validation.data
 
     // Parse GitHub URL
     const { owner, repo } = parseGitHubUrl(githubUrl)
@@ -99,9 +100,6 @@ export async function POST(request: NextRequest) {
 
     // Fetch Python file from GitHub
     const code = await client.fetchFile({ owner, repo }, filePath)
-
-    // Extract function name from file path
-    const functionName = filePath.split('/').pop()?.replace('.py', '') || 'function'
 
     // Deploy to Modal with namespacing and environment variables
     const { endpoint, deploymentId } = await deployToModal(code, owner, repo, functionName, envVars)

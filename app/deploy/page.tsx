@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Github, Loader2, CheckCircle2, XCircle } from "lucide-react"
 import { toast } from "sonner"
 import { FilePicker } from "@/components/deploy/FilePicker"
+import { FunctionSelector } from "@/components/deploy/FunctionSelector"
 import { GitHubPATInput } from "@/components/settings/GitHubPATInput"
 import { getGitHubToken } from "@/lib/storage/settings"
 
@@ -15,6 +16,7 @@ type DeployStatus = 'idle' | 'fetching' | 'deploying' | 'success' | 'error'
 export default function DeployPage() {
   const [githubUrl, setGithubUrl] = useState('')
   const [filePath, setFilePath] = useState('')
+  const [functionName, setFunctionName] = useState('')
   const [envVars, setEnvVars] = useState('')
   const [status, setStatus] = useState<DeployStatus>('idle')
   const [endpoint, setEndpoint] = useState('')
@@ -28,6 +30,11 @@ export default function DeployPage() {
 
     if (!filePath) {
       toast.error('Please select a Python file')
+      return
+    }
+
+    if (!functionName) {
+      toast.error('Please select a function to deploy')
       return
     }
 
@@ -64,6 +71,7 @@ export default function DeployPage() {
         body: JSON.stringify({
           githubUrl,
           filePath,
+          functionName,
           token,
           envVars: Object.keys(envVarsObject).length > 0 ? envVarsObject : undefined
         })
@@ -147,6 +155,14 @@ export default function DeployPage() {
                 githubUrl={githubUrl}
                 value={filePath}
                 onChange={setFilePath}
+                disabled={status === 'fetching' || status === 'deploying'}
+              />
+
+              <FunctionSelector
+                githubUrl={githubUrl}
+                filePath={filePath}
+                value={functionName}
+                onChange={setFunctionName}
                 disabled={status === 'fetching' || status === 'deploying'}
               />
 

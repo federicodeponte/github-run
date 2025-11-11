@@ -125,10 +125,23 @@ def web():
 
                 # Get the function
                 if function_name not in namespace:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Function '{function_name}' not defined in code"
-                    )
+                    # List available functions for better error message
+                    available_functions = [
+                        name for name in namespace.keys()
+                        if callable(namespace[name]) and not name.startswith('_')
+                    ]
+
+                    if available_functions:
+                        available_list = ', '.join(available_functions)
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Function '{function_name}' not found. Available functions: {available_list}"
+                        )
+                    else:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Function '{function_name}' not found. No callable functions detected in code."
+                        )
 
                 user_function = namespace[function_name]
 
