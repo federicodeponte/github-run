@@ -15,6 +15,7 @@ type DeployStatus = 'idle' | 'fetching' | 'deploying' | 'success' | 'error'
 export default function DeployPage() {
   const [githubUrl, setGithubUrl] = useState('')
   const [filePath, setFilePath] = useState('')
+  const [envVars, setEnvVars] = useState('')
   const [status, setStatus] = useState<DeployStatus>('idle')
   const [endpoint, setEndpoint] = useState('')
   const [error, setError] = useState('')
@@ -38,11 +39,28 @@ export default function DeployPage() {
       // Get GitHub token from storage
       const token = getGitHubToken()
 
+      // Parse environment variables from key=value format
+      const envVarsObject: Record<string, string> = {}
+      if (envVars.trim()) {
+        envVars.split('\n').forEach((line) => {
+          const trimmed = line.trim()
+          if (trimmed && trimmed.includes('=')) {
+            const [key, ...valueParts] = trimmed.split('=')
+            envVarsObject[key.trim()] = valueParts.join('=').trim()
+          }
+        })
+      }
+
       // Call our API route to deploy
       const response = await fetch('/api/deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ githubUrl, filePath, token })
+        body: JSON.stringify({
+          githubUrl,
+          filePath,
+          token,
+          envVars: Object.keys(envVarsObject).length > 0 ? envVarsObject : undefined
+        })
       })
 
       const data = await response.json()
@@ -125,6 +143,20 @@ export default function DeployPage() {
                 onChange={setFilePath}
                 disabled={status === 'fetching' || status === 'deploying'}
               />
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Environment Variables (Optional)</label>
+                <textarea
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  placeholder={"OPENAI_API_KEY=sk-...\nAPI_URL=https://api.example.com"}
+                  value={envVars}
+                  onChange={(e) => setEnvVars(e.target.value)}
+                  disabled={status === 'fetching' || status === 'deploying'}
+                />
+                <p className="text-xs text-muted-foreground">
+                  One variable per line in KEY=VALUE format
+                </p>
+              </div>
 
               <Button
                 onClick={handleDeploy}

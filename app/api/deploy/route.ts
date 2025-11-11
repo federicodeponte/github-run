@@ -13,6 +13,7 @@ const deployRequestSchema = z.object({
   githubUrl: z.string().url('Invalid GitHub URL'),
   filePath: z.string().min(1, 'File path is required').regex(/\.py$/, 'File must be a Python file (.py)'),
   token: z.string().optional(),
+  envVars: z.record(z.string(), z.string()).optional(),
 })
 
 /**
@@ -36,7 +37,8 @@ async function deployToModal(
   code: string,
   owner: string,
   repo: string,
-  functionName: string
+  functionName: string,
+  envVars?: Record<string, string>
 ): Promise<{ endpoint: string; deploymentId: string }> {
   const modalUrl = 'https://scaile--github-run-mvp-web.modal.run/deploy'
 
@@ -50,6 +52,7 @@ async function deployToModal(
       owner,
       repo,
       function_name: functionName,
+      env_vars: envVars || {},
     }),
   })
 
@@ -86,7 +89,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { githubUrl, filePath, token } = validation.data
+    const { githubUrl, filePath, token, envVars } = validation.data
 
     // Parse GitHub URL
     const { owner, repo } = parseGitHubUrl(githubUrl)
@@ -100,8 +103,8 @@ export async function POST(request: NextRequest) {
     // Extract function name from file path
     const functionName = filePath.split('/').pop()?.replace('.py', '') || 'function'
 
-    // Deploy to Modal with namespacing
-    const { endpoint, deploymentId } = await deployToModal(code, owner, repo, functionName)
+    // Deploy to Modal with namespacing and environment variables
+    const { endpoint, deploymentId } = await deployToModal(code, owner, repo, functionName, envVars)
 
     return NextResponse.json({
       success: true,
