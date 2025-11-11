@@ -10,6 +10,8 @@ import { FilePicker } from "@/components/deploy/FilePicker"
 import { FunctionSelector } from "@/components/deploy/FunctionSelector"
 import { GitHubPATInput } from "@/components/settings/GitHubPATInput"
 import { getGitHubToken } from "@/lib/storage/settings"
+import { generateExampleRequest, generateCurlExample } from "@/lib/python/example-generator"
+import type { PythonFunction } from "@/lib/python/parser"
 
 type DeployStatus = 'idle' | 'fetching' | 'deploying' | 'success' | 'error'
 
@@ -17,6 +19,7 @@ export default function DeployPage() {
   const [githubUrl, setGithubUrl] = useState('')
   const [filePath, setFilePath] = useState('')
   const [functionName, setFunctionName] = useState('')
+  const [selectedFunction, setSelectedFunction] = useState<PythonFunction | null>(null)
   const [envVars, setEnvVars] = useState('')
   const [status, setStatus] = useState<DeployStatus>('idle')
   const [endpoint, setEndpoint] = useState('')
@@ -94,18 +97,48 @@ export default function DeployPage() {
   }
 
   const testEndpoint = async () => {
-    if (!endpoint) return
+    if (!endpoint || !selectedFunction) return
 
     try {
+      // Generate appropriate test data based on function signature
+      const testPayload = generateExampleRequest(selectedFunction, false)
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'World' })
+        body: JSON.stringify(testPayload)
       })
       const data = await response.json()
       toast.success(`Response: ${JSON.stringify(data)}`)
     } catch (err: any) {
       toast.error(`Test failed: ${err.message}`)
+    }
+  }
+
+  // Fetch function metadata when function name changes
+  const handleFunctionChange = async (name: string) => {
+    setFunctionName(name)
+
+    if (!name || !githubUrl || !filePath) {
+      setSelectedFunction(null)
+      return
+    }
+
+    try {
+      const token = getGitHubToken()
+      const response = await fetch('/api/repos/functions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ githubUrl, filePath, token })
+      })
+
+      const data = await response.json()
+      if (data.success && data.functions) {
+        const func = data.functions.find((f: PythonFunction) => f.name === name)
+        setSelectedFunction(func || null)
+      }
+    } catch (err) {
+      console.error('Failed to fetch function metadata:', err)
     }
   }
 
@@ -162,7 +195,7 @@ export default function DeployPage() {
                 githubUrl={githubUrl}
                 filePath={filePath}
                 value={functionName}
-                onChange={setFunctionName}
+                onChange={handleFunctionChange}
                 disabled={status === 'fetching' || status === 'deploying'}
               />
 
@@ -235,9 +268,11 @@ export default function DeployPage() {
                 <div className="bg-muted p-4 rounded-lg space-y-2">
                   <p className="text-sm font-medium">Example cURL Request:</p>
                   <pre className="text-xs overflow-x-auto">
-                    {`curl -X POST ${endpoint} \\
+                    {selectedFunction
+                      ? generateCurlExample(endpoint, selectedFunction)
+                      : `curl -X POST ${endpoint} \\
   -H "Content-Type: application/json" \\
-  -d '{"name": "World"}'`}
+  -d '{}'`}
                   </pre>
                 </div>
               </CardContent>

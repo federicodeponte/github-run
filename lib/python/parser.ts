@@ -2,14 +2,68 @@
 // ABOUTME: Robust regex-based parsing with support for async, decorators, and type hints
 
 /**
+ * Represents a Python function parameter with full metadata
+ */
+export interface PythonParameter {
+  name: string          // Parameter name (e.g., 'url', 'name', 'timeout')
+  type?: string         // Type annotation (e.g., 'str', 'int', 'dict', 'List[str]')
+  defaultValue?: string // Default value if present (e.g., '"World"', '10', 'None')
+  required: boolean     // True if parameter has no default value
+}
+
+/**
  * Represents a Python function definition
  */
 export interface PythonFunction {
   name: string
-  parameters: string[]
+  parameters: PythonParameter[]
   isAsync: boolean
   hasDecorators: boolean
   lineNumber: number
+}
+
+/**
+ * Parse a parameter string to extract name, type, and default value
+ *
+ * Examples:
+ * - "url" → {name: 'url', required: true}
+ * - "name: str" → {name: 'name', type: 'str', required: true}
+ * - "timeout: int = 30" → {name: 'timeout', type: 'int', defaultValue: '30', required: false}
+ * - "items: List[str] = []" → {name: 'items', type: 'List[str]', defaultValue: '[]', required: false}
+ *
+ * @param paramsStr - Parameter string from function signature
+ * @returns Array of parsed parameters
+ */
+function parseParameters(paramsStr: string): PythonParameter[] {
+  if (!paramsStr.trim()) return []
+
+  return paramsStr
+    .split(',')
+    .map(p => p.trim())
+    .filter(p => p && p !== 'self' && p !== 'cls') // Exclude self/cls
+    .map(param => {
+      // Regex to parse parameter: name[: type][= default]
+      // Examples:
+      // - "url" → name='url'
+      // - "name: str" → name='name', type='str'
+      // - "timeout: int = 30" → name='timeout', type='int', default='30'
+      // - "items: List[str] = []" → name='items', type='List[str]', default='[]'
+      const match = param.match(/^([a-zA-Z_]\w*)\s*(?::\s*([^=]+?))?\s*(?:=\s*(.+))?$/)
+
+      if (!match) {
+        // Fallback: just use the whole parameter as name
+        return { name: param, required: true }
+      }
+
+      const [, name, type, defaultValue] = match
+
+      return {
+        name: name.trim(),
+        type: type?.trim(),
+        defaultValue: defaultValue?.trim(),
+        required: !defaultValue, // Required if no default value
+      }
+    })
 }
 
 /**
@@ -70,15 +124,7 @@ export function extractPythonFunctions(code: string): PythonFunction[] {
       // Only extract top-level functions (no indentation or minimal indentation)
       // This excludes nested functions and class methods
       if (indentation.length === 0 || indentation.length <= 4) {
-        const parameters = params
-          .split(',')
-          .map(p => p.trim())
-          .filter(p => p && p !== 'self' && p !== 'cls') // Exclude self/cls
-          .map(p => {
-            // Extract parameter name (before : or = if present)
-            const match = p.match(/^([a-zA-Z_]\w*)/)
-            return match ? match[1] : p
-          })
+        const parameters = parseParameters(params)
 
         functions.push({
           name: functionName,

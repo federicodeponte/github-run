@@ -8,14 +8,8 @@ import { Loader2 } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { getGitHubToken } from '@/lib/storage/settings'
-
-interface PythonFunction {
-  name: string
-  parameters: string[]
-  isAsync: boolean
-  hasDecorators: boolean
-  lineNumber: number
-}
+import { generateSignature } from '@/lib/python/example-generator'
+import type { PythonFunction } from '@/lib/python/parser'
 
 interface FunctionSelectorProps {
   githubUrl: string
@@ -177,7 +171,7 @@ export function FunctionSelector({
         <option value="">Select a function...</option>
         {functions.map((func) => (
           <option key={func.name} value={func.name}>
-            {func.isAsync ? 'async ' : ''}{func.name}({func.parameters.join(', ')})
+            {generateSignature(func)}
           </option>
         ))}
       </select>
