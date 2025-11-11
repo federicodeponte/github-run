@@ -42,7 +42,7 @@ async function fetchGitHubFile(owner: string, repo: string, path: string) {
 }
 
 // Deploy to Modal.com
-async function deployToModal(code: string, functionName: string) {
+async function deployToModal(code: string, owner: string, repo: string, functionName: string) {
   const modalUrl = 'https://scaile--github-run-mvp-web.modal.run/deploy'
 
   const response = await fetch(modalUrl, {
@@ -52,6 +52,8 @@ async function deployToModal(code: string, functionName: string) {
     },
     body: JSON.stringify({
       code,
+      owner,
+      repo,
       function_name: functionName
     })
   })
@@ -90,8 +92,8 @@ export async function POST(request: NextRequest) {
     // Extract function name from file path
     const functionName = filePath.split('/').pop()?.replace('.py', '') || 'function'
 
-    // Deploy to Modal
-    const { endpoint, deploymentId } = await deployToModal(code, functionName)
+    // Deploy to Modal with namespacing
+    const { endpoint, deploymentId } = await deployToModal(code, owner, repo, functionName)
 
     return NextResponse.json({
       success: true,

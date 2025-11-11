@@ -31,6 +31,8 @@ def web():
 
     class DeployRequest(BaseModel):
         code: str
+        owner: str
+        repo: str
         function_name: str
 
     class ExecuteRequest(BaseModel):
@@ -40,11 +42,14 @@ def web():
     async def deploy(request: DeployRequest):
         """Deploy a Python function"""
         try:
-            # Store the function code
-            deployed_functions[request.function_name] = request.code
+            # Create namespaced key: owner/repo/function_name
+            function_key = f"{request.owner}/{request.repo}/{request.function_name}"
 
-            # Generate endpoint URL
-            endpoint = f"https://scaile--github-run-mvp-web.modal.run/execute/{request.function_name}"
+            # Store the function code
+            deployed_functions[function_key] = request.code
+
+            # Generate namespaced endpoint URL
+            endpoint = f"https://scaile--github-run-mvp-web.modal.run/execute/{request.owner}/{request.repo}/{request.function_name}"
 
             import time
             deployment_id = f"deploy_{int(time.time())}"
@@ -57,17 +62,20 @@ def web():
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    @web_app.post("/execute/{function_name}")
-    async def execute(function_name: str, request_data: dict):
+    @web_app.post("/execute/{owner}/{repo}/{function_name}")
+    async def execute(owner: str, repo: str, function_name: str, request_data: dict):
         """Execute a deployed function"""
         try:
+            # Create namespaced key
+            function_key = f"{owner}/{repo}/{function_name}"
+
             # Get the function code
-            code = deployed_functions.get(function_name)
+            code = deployed_functions.get(function_key)
 
             if not code:
                 raise HTTPException(
                     status_code=404,
-                    detail=f"Function '{function_name}' not found"
+                    detail=f"Function '{function_key}' not found. Please deploy it first."
                 )
 
             # Create execution namespace
