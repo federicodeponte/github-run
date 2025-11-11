@@ -13,7 +13,13 @@ import { getGitHubToken } from "@/lib/storage/settings"
 import { generateExampleRequest, generateCurlExample } from "@/lib/python/example-generator"
 import type { PythonFunction } from "@/lib/python/parser"
 
-type DeployStatus = 'idle' | 'fetching' | 'deploying' | 'success' | 'error'
+type DeployStatus = 'idle' | 'fetching' | 'deploying' | 'testing' | 'success' | 'error'
+
+interface TestResult {
+  success: boolean
+  response?: any
+  error?: string
+}
 
 export default function DeployPage() {
   const [githubUrl, setGithubUrl] = useState('')
@@ -24,6 +30,7 @@ export default function DeployPage() {
   const [status, setStatus] = useState<DeployStatus>('idle')
   const [endpoint, setEndpoint] = useState('')
   const [error, setError] = useState('')
+  const [testResult, setTestResult] = useState<TestResult | null>(null)
 
   const handleDeploy = async () => {
     if (!githubUrl) {
@@ -44,6 +51,7 @@ export default function DeployPage() {
     setStatus('fetching')
     setError('')
     setEndpoint('')
+    setTestResult(null)
 
     try {
       // Get GitHub token from storage
@@ -86,13 +94,58 @@ export default function DeployPage() {
         throw new Error(data.error || 'Deployment failed')
       }
 
-      setStatus('success')
-      setEndpoint(data.endpoint)
-      toast.success('Function deployed successfully!')
+      const deployedEndpoint = data.endpoint
+      setEndpoint(deployedEndpoint)
+
+      // Automatically test the deployed endpoint
+      setStatus('testing')
+      toast.info('Deployment successful! Testing endpoint...')
+
+      try {
+        // Generate appropriate test data based on function signature
+        const testPayload = selectedFunction
+          ? generateExampleRequest(selectedFunction, false)
+          : {}
+
+        const testResponse = await fetch(deployedEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(testPayload)
+        })
+
+        const testData = await testResponse.json()
+
+        if (testResponse.ok && testData.success) {
+          // Test passed
+          setTestResult({
+            success: true,
+            response: testData.result
+          })
+          setStatus('success')
+          toast.success('Deployment verified! Endpoint is working correctly.')
+        } else {
+          // Test failed but deployment succeeded
+          setTestResult({
+            success: false,
+            error: testData.detail || testData.error || 'Test failed'
+          })
+          setStatus('success') // Still show success UI, but with test failure
+          toast.warning('Deployment succeeded but automated test failed. Check the error below.')
+        }
+      } catch (testErr: any) {
+        // Test request failed
+        setTestResult({
+          success: false,
+          error: testErr.message || 'Failed to connect to endpoint'
+        })
+        setStatus('success') // Still show success UI
+        toast.warning('Deployment succeeded but automated test failed. Endpoint may need time to warm up.')
+      }
     } catch (err: any) {
       setStatus('error')
       setError(err.message)
       toast.error(err.message)
+      setTestResult(null)
     }
   }
 
@@ -109,8 +162,25 @@ export default function DeployPage() {
         body: JSON.stringify(testPayload)
       })
       const data = await response.json()
-      toast.success(`Response: ${JSON.stringify(data)}`)
+
+      if (response.ok && data.success) {
+        setTestResult({
+          success: true,
+          response: data.result
+        })
+        toast.success('Test passed! Function is working correctly.')
+      } else {
+        setTestResult({
+          success: false,
+          error: data.detail || data.error || 'Test failed'
+        })
+        toast.error(`Test failed: ${data.detail || data.error || 'Unknown error'}`)
+      }
     } catch (err: any) {
+      setTestResult({
+        success: false,
+        error: err.message
+      })
       toast.error(`Test failed: ${err.message}`)
     }
   }
@@ -215,13 +285,13 @@ export default function DeployPage() {
 
               <Button
                 onClick={handleDeploy}
-                disabled={status === 'fetching' || status === 'deploying'}
+                disabled={status === 'fetching' || status === 'deploying' || status === 'testing'}
                 className="w-full"
               >
-                {status === 'fetching' || status === 'deploying' ? (
+                {status === 'fetching' || status === 'deploying' || status === 'testing' ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {status === 'fetching' ? 'Fetching code...' : 'Deploying...'}
+                    {status === 'fetching' ? 'Fetching code...' : status === 'deploying' ? 'Deploying...' : 'Testing endpoint...'}
                   </>
                 ) : (
                   <>
@@ -258,11 +328,53 @@ export default function DeployPage() {
                   </div>
                 </div>
 
+                {/* Automated Test Results */}
+                {testResult && (
+                  <div className={`rounded-lg p-4 space-y-2 ${
+                    testResult.success
+                      ? 'bg-green-500/10 border border-green-500/20'
+                      : 'bg-yellow-500/10 border border-yellow-500/20'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      {testResult.success ? (
+                        <>
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          <p className="text-sm font-medium text-green-600">Automated Test Passed</p>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="h-4 w-4 text-yellow-600" />
+                          <p className="text-sm font-medium text-yellow-600">Automated Test Failed</p>
+                        </>
+                      )}
+                    </div>
+                    {testResult.success && testResult.response && (
+                      <div className="mt-2">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Response:</p>
+                        <pre className="text-xs bg-background p-2 rounded overflow-x-auto">
+                          {JSON.stringify(testResult.response, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                    {!testResult.success && testResult.error && (
+                      <div className="mt-2">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Error:</p>
+                        <pre className="text-xs bg-background p-2 rounded overflow-x-auto text-red-600">
+                          {testResult.error}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Test Your Function</label>
+                  <label className="text-sm font-medium">Manual Test</label>
                   <Button onClick={testEndpoint} variant="outline" className="w-full">
-                    Send Test Request
+                    Re-test Endpoint
                   </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Test was automatically run on deployment. Click to re-test manually.
+                  </p>
                 </div>
 
                 <div className="bg-muted p-4 rounded-lg space-y-2">
