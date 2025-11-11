@@ -43,7 +43,13 @@ export default function DeployPage() {
       const envVarsObject: Record<string, string> = {}
       if (envVars.trim()) {
         envVars.split('\n').forEach((line) => {
-          const trimmed = line.trim()
+          let trimmed = line.trim()
+
+          // Remove 'export' prefix if present
+          if (trimmed.startsWith('export ')) {
+            trimmed = trimmed.substring(7).trim()
+          }
+
           if (trimmed && trimmed.includes('=')) {
             const [key, ...valueParts] = trimmed.split('=')
             envVarsObject[key.trim()] = valueParts.join('=').trim()
@@ -154,7 +160,7 @@ export default function DeployPage() {
                   disabled={status === 'fetching' || status === 'deploying'}
                 />
                 <p className="text-xs text-muted-foreground">
-                  One variable per line in KEY=VALUE format
+                  One variable per line in KEY=VALUE format (export prefix optional)
                 </p>
               </div>
 
