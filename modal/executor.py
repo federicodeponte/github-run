@@ -9,10 +9,18 @@ import modal
 app = modal.App("github-run-mvp")
 
 # Base image with FastAPI and common packages
+# Includes popular libraries for web scraping, data science, and API integrations
 image = modal.Image.debian_slim().pip_install(
     "fastapi[standard]",
     "requests",
-    "pydantic"
+    "pydantic",
+    "beautifulsoup4",
+    "lxml",
+    "openai",
+    "fpdf2",
+    "pandas",
+    "numpy",
+    "pillow",
 )
 
 # In-memory storage for deployed functions (MVP - functions persist during container lifetime)
@@ -24,10 +32,20 @@ deployed_functions = {}
 @modal.asgi_app()
 def web():
     from fastapi import FastAPI, HTTPException
+    from fastapi.middleware.cors import CORSMiddleware
     from pydantic import BaseModel
     import json
 
     web_app = FastAPI(title="GitHub Run MVP")
+
+    # Configure CORS to allow requests from Vercel
+    web_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # Allow all origins for MVP
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     class DeployRequest(BaseModel):
         code: str
