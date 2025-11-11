@@ -15,11 +15,9 @@ image = modal.Image.debian_slim().pip_install(
     "pydantic"
 )
 
-# Persistent storage for deployed functions using Modal Dict
-deployed_functions = modal.Dict.from_name(
-    "github-run-functions",
-    create_if_missing=True
-)
+# In-memory storage for deployed functions (MVP - functions persist during container lifetime)
+# For production, use Modal Volumes or external database
+deployed_functions = {}
 
 
 @app.function(image=image)
