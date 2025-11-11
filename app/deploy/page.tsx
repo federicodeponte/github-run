@@ -127,6 +127,16 @@ export default function DeployPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(testPayload)
       })
+
+      const contentType = response.headers.get('content-type')
+      if (!contentType?.includes('application/json')) {
+        const text = await response.text()
+        const error = `Server returned non-JSON response: ${text.substring(0, 100)}`
+        const result = { success: false, error }
+        if (showToast) toast.error(`Test failed: ${error}`)
+        return result
+      }
+
       const data = await response.json()
 
       if (response.ok && data.success) {
