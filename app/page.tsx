@@ -20,8 +20,9 @@ export default function Home() {
             <Link href="/pricing" className="text-sm text-muted-foreground hover:text-foreground">
               Pricing
             </Link>
-            <Button variant="ghost" size="sm">Sign In</Button>
-            <Button size="sm">Get Started</Button>
+            <Link href="/deploy">
+              <Button size="sm">Get Started</Button>
+            </Link>
           </nav>
         </div>
       </header>
@@ -45,13 +46,17 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" className="gap-2">
-              <Github className="h-5 w-5" />
-              Connect GitHub
-            </Button>
-            <Button size="lg" variant="outline">
-              View Demo
-            </Button>
+            <Link href="/deploy">
+              <Button size="lg" className="gap-2">
+                <Github className="h-5 w-5" />
+                Deploy Now
+              </Button>
+            </Link>
+            <Link href="/deploy">
+              <Button size="lg" variant="outline">
+                View Demo
+              </Button>
+            </Link>
           </div>
 
           {/* Code Example */}
