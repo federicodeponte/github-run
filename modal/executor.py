@@ -48,10 +48,13 @@ def web():
             # Generate endpoint URL
             endpoint = f"https://scaile--github-run-mvp-web.modal.run/execute/{request.function_name}"
 
+            import time
+            deployment_id = f"deploy_{int(time.time())}"
+
             return {
                 "success": True,
                 "endpoint": endpoint,
-                "deployment_id": f"deploy_{len(deployed_functions)}"
+                "deployment_id": deployment_id
             }
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
@@ -100,9 +103,13 @@ def web():
     @web_app.get("/health")
     async def health():
         """Health check"""
+        try:
+            function_list = list(deployed_functions.keys())
+        except:
+            function_list = []
         return {
             "status": "healthy",
-            "deployed_functions": list(deployed_functions.keys())
+            "deployed_functions": function_list
         }
 
     return web_app
