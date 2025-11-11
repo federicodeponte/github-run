@@ -52,6 +52,7 @@ def web():
         owner: str
         repo: str
         function_name: str
+        env_vars: dict = {}  # Optional environment variables
 
     class ExecuteRequest(BaseModel):
         pass  # Dynamic arguments
@@ -63,8 +64,11 @@ def web():
             # Create namespaced key: owner/repo/function_name
             function_key = f"{request.owner}/{request.repo}/{request.function_name}"
 
-            # Store the function code
-            deployed_functions[function_key] = request.code
+            # Store the function code and env vars
+            deployed_functions[function_key] = {
+                "code": request.code,
+                "env_vars": request.env_vars
+            }
 
             # Generate namespaced endpoint URL
             endpoint = f"https://scaile--github-run-mvp-web.modal.run/execute/{request.owner}/{request.repo}/{request.function_name}"
@@ -84,40 +88,64 @@ def web():
     async def execute(owner: str, repo: str, function_name: str, request_data: dict):
         """Execute a deployed function"""
         try:
+            import os
+
             # Create namespaced key
             function_key = f"{owner}/{repo}/{function_name}"
 
-            # Get the function code
-            code = deployed_functions.get(function_key)
+            # Get the function data
+            function_data = deployed_functions.get(function_key)
 
-            if not code:
+            if not function_data:
                 raise HTTPException(
                     status_code=404,
                     detail=f"Function '{function_key}' not found. Please deploy it first."
                 )
 
-            # Create execution namespace
-            namespace = {}
+            # Handle backward compatibility (old deployments only stored code as string)
+            if isinstance(function_data, str):
+                code = function_data
+                env_vars = {}
+            else:
+                code = function_data["code"]
+                env_vars = function_data.get("env_vars", {})
 
-            # Execute the code
-            exec(code, namespace)
+            # Set environment variables
+            original_env = {}
+            for key, value in env_vars.items():
+                original_env[key] = os.environ.get(key)
+                os.environ[key] = str(value)
 
-            # Get the function
-            if function_name not in namespace:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Function '{function_name}' not defined in code"
-                )
+            try:
+                # Create execution namespace
+                namespace = {}
 
-            user_function = namespace[function_name]
+                # Execute the code
+                exec(code, namespace)
 
-            # Execute with provided arguments
-            result = user_function(**request_data)
+                # Get the function
+                if function_name not in namespace:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Function '{function_name}' not defined in code"
+                    )
 
-            return {
-                "success": True,
-                "result": result
-            }
+                user_function = namespace[function_name]
+
+                # Execute with provided arguments
+                result = user_function(**request_data)
+
+                return {
+                    "success": True,
+                    "result": result
+                }
+            finally:
+                # Restore original environment variables
+                for key, original_value in original_env.items():
+                    if original_value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = original_value
 
         except TypeError as e:
             raise HTTPException(status_code=400, detail=f"Invalid arguments: {str(e)}")
