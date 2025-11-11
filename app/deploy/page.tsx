@@ -97,15 +97,39 @@ export default function DeployPage() {
       const deployedEndpoint = data.endpoint
       setEndpoint(deployedEndpoint)
 
-      // Automatically test the deployed endpoint
+      // Automatically test the deployed endpoint with retry logic
       setStatus('testing')
       toast.info('Deployment successful! Testing endpoint...')
 
-      const testResult = await runTest(false)
-      setTestResult(testResult)
+      // Wait 2 seconds for Modal to sync across containers
+      await new Promise(resolve => setTimeout(resolve, 2000))
+
+      let testResult: TestResult | null = null
+      const maxAttempts = 3
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        if (attempt > 1) {
+          toast.info(`Retrying test (attempt ${attempt}/${maxAttempts})...`)
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        }
+
+        testResult = await runTest(false)
+
+        // Success - stop retrying
+        if (testResult.success) break
+
+        // Retry on transient errors (non-JSON or 404)
+        const isTransientError = testResult.error?.includes('non-JSON') ||
+                                testResult.error?.includes('404') ||
+                                testResult.error?.includes('not found')
+
+        if (!isTransientError || attempt === maxAttempts) break
+      }
+
+      setTestResult(testResult!)
       setStatus('success')
 
-      if (testResult.success) {
+      if (testResult!.success) {
         toast.success('Deployment verified! Endpoint is working correctly.')
       } else {
         toast.warning('Deployment succeeded but automated test failed. Check the error below.')
