@@ -1,65 +1,60 @@
-import { NextRequest, NextResponse } from 'next/server'
+// ABOUTME: API endpoint for deploying Python functions from GitHub to Modal
+// ABOUTME: Refactored to use centralized GitHub client (DRY principle)
 
-// Parse GitHub URL to extract owner, repo, and optionally branch
-function parseGitHubUrl(url: string) {
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { createGitHubClient } from '@/lib/github/client'
+import { parseGitHubError } from '@/lib/github/errors'
+
+/**
+ * Request validation schema
+ */
+const deployRequestSchema = z.object({
+  githubUrl: z.string().url('Invalid GitHub URL'),
+  filePath: z.string().min(1, 'File path is required').regex(/\.py$/, 'File must be a Python file (.py)'),
+  token: z.string().optional(),
+})
+
+/**
+ * Parse GitHub URL to extract owner and repo
+ */
+function parseGitHubUrl(url: string): { owner: string; repo: string } {
   const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)/)
   if (!match) {
-    throw new Error('Invalid GitHub URL format')
+    throw new Error('Invalid GitHub URL format. Expected: https://github.com/owner/repo')
   }
   return {
     owner: match[1],
-    repo: match[2].replace('.git', '')
+    repo: match[2].replace('.git', ''),
   }
 }
 
-// Fetch file content from GitHub
-async function fetchGitHubFile(owner: string, repo: string, path: string) {
-  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`
-
-  const response = await fetch(url, {
-    headers: {
-      'Accept': 'application/vnd.github.v3+json',
-      'User-Agent': 'GitHub-Run-MVP'
-    }
-  })
-
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error(`File not found: ${path}`)
-    }
-    throw new Error(`GitHub API error: ${response.statusText}`)
-  }
-
-  const data = await response.json()
-
-  if (data.type !== 'file') {
-    throw new Error(`${path} is not a file`)
-  }
-
-  // Decode base64 content
-  const content = Buffer.from(data.content, 'base64').toString('utf-8')
-  return content
-}
-
-// Deploy to Modal.com
-async function deployToModal(code: string, owner: string, repo: string, functionName: string) {
+/**
+ * Deploy function to Modal.com
+ */
+async function deployToModal(
+  code: string,
+  owner: string,
+  repo: string,
+  functionName: string
+): Promise<{ endpoint: string; deploymentId: string }> {
   const modalUrl = 'https://scaile--github-run-mvp-web.modal.run/deploy'
 
   const response = await fetch(modalUrl, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       code,
       owner,
       repo,
-      function_name: functionName
-    })
+      function_name: functionName,
+    }),
   })
 
   if (!response.ok) {
-    const error = await response.json()
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
     throw new Error(error.detail || 'Modal deployment failed')
   }
 
@@ -67,27 +62,40 @@ async function deployToModal(code: string, owner: string, repo: string, function
 
   return {
     endpoint: data.endpoint,
-    deploymentId: data.deployment_id
+    deploymentId: data.deployment_id,
   }
 }
 
+/**
+ * POST /api/deploy
+ * Deploy a Python function from GitHub to Modal
+ */
 export async function POST(request: NextRequest) {
   try {
+    // Validate request body
     const body = await request.json()
-    const { githubUrl, filePath } = body
+    const validation = deployRequestSchema.safeParse(body)
 
-    if (!githubUrl || !filePath) {
+    if (!validation.success) {
       return NextResponse.json(
-        { error: 'Missing required fields: githubUrl and filePath' },
+        {
+          success: false,
+          error: validation.error.issues[0].message,
+        },
         { status: 400 }
       )
     }
 
+    const { githubUrl, filePath, token } = validation.data
+
     // Parse GitHub URL
     const { owner, repo } = parseGitHubUrl(githubUrl)
 
+    // Create GitHub client with optional token
+    const client = createGitHubClient(token)
+
     // Fetch Python file from GitHub
-    const code = await fetchGitHubFile(owner, repo, filePath)
+    const code = await client.fetchFile({ owner, repo }, filePath)
 
     // Extract function name from file path
     const functionName = filePath.split('/').pop()?.replace('.py', '') || 'function'
@@ -99,14 +107,19 @@ export async function POST(request: NextRequest) {
       success: true,
       endpoint,
       deploymentId,
-      code: code.substring(0, 200) + '...' // Return snippet for verification
+      code: code.substring(0, 200) + '...', // Return snippet for verification
     })
 
-  } catch (error: any) {
-    console.error('Deployment error:', error)
+  } catch (error) {
+    const githubError = parseGitHubError(error)
+    console.error('Deployment error:', githubError)
+
     return NextResponse.json(
-      { error: error.message || 'Deployment failed' },
-      { status: 500 }
+      {
+        success: false,
+        error: githubError.message || 'Deployment failed',
+      },
+      { status: githubError.statusCode || 500 }
     )
   }
 }

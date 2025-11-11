@@ -4,15 +4,17 @@ import { useState } from 'react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Github, Loader2, CheckCircle2, XCircle } from "lucide-react"
 import { toast } from "sonner"
+import { FilePicker } from "@/components/deploy/FilePicker"
+import { GitHubPATInput } from "@/components/settings/GitHubPATInput"
+import { getGitHubToken } from "@/lib/storage/settings"
 
 type DeployStatus = 'idle' | 'fetching' | 'deploying' | 'success' | 'error'
 
 export default function DeployPage() {
   const [githubUrl, setGithubUrl] = useState('')
-  const [filePath, setFilePath] = useState('functions/hello.py')
+  const [filePath, setFilePath] = useState('')
   const [status, setStatus] = useState<DeployStatus>('idle')
   const [endpoint, setEndpoint] = useState('')
   const [error, setError] = useState('')
@@ -23,16 +25,24 @@ export default function DeployPage() {
       return
     }
 
+    if (!filePath) {
+      toast.error('Please select a Python file')
+      return
+    }
+
     setStatus('fetching')
     setError('')
     setEndpoint('')
 
     try {
+      // Get GitHub token from storage
+      const token = getGitHubToken()
+
       // Call our API route to deploy
       const response = await fetch('/api/deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ githubUrl, filePath })
+        body: JSON.stringify({ githubUrl, filePath, token })
       })
 
       const data = await response.json()
@@ -87,11 +97,13 @@ export default function DeployPage() {
             </p>
           </div>
 
+          <GitHubPATInput />
+
           <Card>
             <CardHeader>
               <CardTitle>Deployment Configuration</CardTitle>
               <CardDescription>
-                Enter the GitHub repository URL and the path to your Python file
+                Enter the GitHub repository URL and select your Python file
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -107,17 +119,12 @@ export default function DeployPage() {
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Python File Path</label>
-                <Input
-                  placeholder="functions/hello.py"
-                  value={filePath}
-                  onChange={(e) => setFilePath(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Path relative to repository root
-                </p>
-              </div>
+              <FilePicker
+                githubUrl={githubUrl}
+                value={filePath}
+                onChange={setFilePath}
+                disabled={status === 'fetching' || status === 'deploying'}
+              />
 
               <Button
                 onClick={handleDeploy}
