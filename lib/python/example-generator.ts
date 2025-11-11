@@ -88,123 +88,63 @@ export function generateSignature(func: PythonFunction): string {
   return `${asyncPrefix}${func.name}(${params.join(', ')})`
 }
 
-/**
- * Generate an example value for a parameter based on type and name
- *
- * Uses heuristics:
- * 1. Parameter name patterns (url, name, email, etc.)
- * 2. Type annotations (str, int, bool, dict, list)
- * 3. Fallback to generic values
- *
- * @param param - Python parameter with metadata
- * @returns Example value appropriate for the parameter
- */
 function generateExampleValue(param: PythonParameter): any {
   const name = param.name.toLowerCase()
   const type = param.type?.toLowerCase()
 
-  // Heuristic 1: Special parameter names
-  if (name.includes('url') || name.includes('link') || name.includes('href')) {
-    return 'https://example.com'
-  }
-  if (name.includes('email') || name.includes('mail')) {
-    return 'user@example.com'
-  }
-  if (name.includes('name') || name.includes('username')) {
-    return 'World'
-  }
-  if (name.includes('path') || name.includes('file')) {
-    return '/path/to/file'
-  }
-  if (name.includes('id')) {
-    return '12345'
-  }
-  if (name.includes('count') || name.includes('num') || name.includes('size')) {
-    return 10
-  }
-  if (name.includes('enabled') || name.includes('active') || name.includes('flag')) {
-    return true
+  // Name-based heuristics (order matters: most specific first)
+  const namePatterns: [RegExp, any][] = [
+    [/url|link|href/, 'https://example.com'],
+    [/email|mail/, 'user@example.com'],
+    [/name|username/, 'World'],
+    [/path|file/, '/path/to/file'],
+    [/id/, '12345'],
+    [/count|num|size/, 10],
+    [/enabled|active|flag/, true],
+  ]
+
+  for (const [pattern, value] of namePatterns) {
+    if (pattern.test(name)) return value
   }
 
-  // Heuristic 2: Type annotations
+  // Type-based defaults
   if (type) {
-    // String types
-    if (type === 'str' || type === 'string') {
-      return 'example'
-    }
-
-    // Numeric types
-    if (type === 'int' || type === 'integer') {
-      return 0
-    }
-    if (type === 'float') {
-      return 0.0
-    }
-
-    // Boolean
-    if (type === 'bool' || type === 'boolean') {
-      return true
-    }
-
-    // Collection types
-    if (type === 'dict' || type.startsWith('dict[')) {
-      return {}
-    }
-    if (type === 'list' || type.startsWith('list[')) {
-      return []
-    }
     if (type.startsWith('optional[')) {
-      // Extract inner type: Optional[str] → str
-      const innerMatch = type.match(/optional\[(.+)\]/)
-      if (innerMatch) {
-        return generateExampleValue({ ...param, type: innerMatch[1] })
-      }
+      const innerType = type.match(/optional\[(.+)\]/)?.[1]
+      if (innerType) return generateExampleValue({ ...param, type: innerType })
     }
+    const typeDefaults: Record<string, any> = {
+      str: 'example', string: 'example',
+      int: 0, integer: 0, float: 0.0,
+      bool: true, boolean: true,
+      dict: {}, list: [],
+    }
+    if (typeDefaults[type]) return typeDefaults[type]
+    if (type.startsWith('dict[')) return {}
+    if (type.startsWith('list[')) return []
   }
 
-  // Heuristic 3: Fallback to generic string
   return 'example'
 }
 
-/**
- * Parse a default value string to its JavaScript equivalent
- *
- * Examples:
- * - '"World"' → 'World'
- * - '10' → 10
- * - 'True' → true
- * - 'None' → null
- * - '[]' → []
- *
- * @param defaultValue - Default value string from Python code
- * @returns Parsed JavaScript value
- */
 function parseDefaultValue(defaultValue: string): any {
-  const trimmed = defaultValue.trim()
+  const t = defaultValue.trim()
 
   // String literals
-  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-      (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-    return trimmed.slice(1, -1)
+  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
+    return t.slice(1, -1)
   }
 
-  // Python boolean/None
-  if (trimmed === 'True') return true
-  if (trimmed === 'False') return false
-  if (trimmed === 'None') return null
+  // Lookup table for constants
+  const constants: Record<string, any> = {
+    True: true, False: false, None: null,
+    '[]': [], '{}': {},
+  }
+  if (t in constants) return constants[t]
 
   // Numbers
-  if (/^-?\d+$/.test(trimmed)) {
-    return parseInt(trimmed, 10)
-  }
-  if (/^-?\d+\.\d+$/.test(trimmed)) {
-    return parseFloat(trimmed)
-  }
+  if (/^-?\d+$/.test(t)) return parseInt(t, 10)
+  if (/^-?\d+\.\d+$/.test(t)) return parseFloat(t)
 
-  // Collections
-  if (trimmed === '[]') return []
-  if (trimmed === '{}') return {}
-
-  // Fallback: return as string
-  return trimmed
+  return t
 }

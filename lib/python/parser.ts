@@ -22,46 +22,24 @@ export interface PythonFunction {
   lineNumber: number
 }
 
-/**
- * Parse a parameter string to extract name, type, and default value
- *
- * Examples:
- * - "url" → {name: 'url', required: true}
- * - "name: str" → {name: 'name', type: 'str', required: true}
- * - "timeout: int = 30" → {name: 'timeout', type: 'int', defaultValue: '30', required: false}
- * - "items: List[str] = []" → {name: 'items', type: 'List[str]', defaultValue: '[]', required: false}
- *
- * @param paramsStr - Parameter string from function signature
- * @returns Array of parsed parameters
- */
+// Parse parameter string: "url: str = 'default'" → {name, type, defaultValue, required}
 function parseParameters(paramsStr: string): PythonParameter[] {
   if (!paramsStr.trim()) return []
 
   return paramsStr
     .split(',')
     .map(p => p.trim())
-    .filter(p => p && p !== 'self' && p !== 'cls') // Exclude self/cls
+    .filter(p => p && p !== 'self' && p !== 'cls')
     .map(param => {
-      // Regex to parse parameter: name[: type][= default]
-      // Examples:
-      // - "url" → name='url'
-      // - "name: str" → name='name', type='str'
-      // - "timeout: int = 30" → name='timeout', type='int', default='30'
-      // - "items: List[str] = []" → name='items', type='List[str]', default='[]'
       const match = param.match(/^([a-zA-Z_]\w*)\s*(?::\s*([^=]+?))?\s*(?:=\s*(.+))?$/)
-
-      if (!match) {
-        // Fallback: just use the whole parameter as name
-        return { name: param, required: true }
-      }
+      if (!match) return { name: param, required: true }
 
       const [, name, type, defaultValue] = match
-
       return {
         name: name.trim(),
         type: type?.trim(),
         defaultValue: defaultValue?.trim(),
-        required: !defaultValue, // Required if no default value
+        required: !defaultValue,
       }
     })
 }

@@ -101,45 +101,14 @@ export default function DeployPage() {
       setStatus('testing')
       toast.info('Deployment successful! Testing endpoint...')
 
-      try {
-        // Generate appropriate test data based on function signature
-        const testPayload = selectedFunction
-          ? generateExampleRequest(selectedFunction, false)
-          : {}
+      const testResult = await runTest(false)
+      setTestResult(testResult)
+      setStatus('success')
 
-        const testResponse = await fetch(deployedEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(testPayload)
-        })
-
-        const testData = await testResponse.json()
-
-        if (testResponse.ok && testData.success) {
-          // Test passed
-          setTestResult({
-            success: true,
-            response: testData.result
-          })
-          setStatus('success')
-          toast.success('Deployment verified! Endpoint is working correctly.')
-        } else {
-          // Test failed but deployment succeeded
-          setTestResult({
-            success: false,
-            error: testData.detail || testData.error || 'Test failed'
-          })
-          setStatus('success') // Still show success UI, but with test failure
-          toast.warning('Deployment succeeded but automated test failed. Check the error below.')
-        }
-      } catch (testErr: any) {
-        // Test request failed
-        setTestResult({
-          success: false,
-          error: testErr.message || 'Failed to connect to endpoint'
-        })
-        setStatus('success') // Still show success UI
-        toast.warning('Deployment succeeded but automated test failed. Endpoint may need time to warm up.')
+      if (testResult.success) {
+        toast.success('Deployment verified! Endpoint is working correctly.')
+      } else {
+        toast.warning('Deployment succeeded but automated test failed. Check the error below.')
       }
     } catch (err: any) {
       setStatus('error')
@@ -149,13 +118,10 @@ export default function DeployPage() {
     }
   }
 
-  const testEndpoint = async () => {
-    if (!endpoint || !selectedFunction) return
+  const runTest = async (showToast = true): Promise<TestResult> => {
+    const testPayload = selectedFunction ? generateExampleRequest(selectedFunction, false) : {}
 
     try {
-      // Generate appropriate test data based on function signature
-      const testPayload = generateExampleRequest(selectedFunction, false)
-
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -164,25 +130,26 @@ export default function DeployPage() {
       const data = await response.json()
 
       if (response.ok && data.success) {
-        setTestResult({
-          success: true,
-          response: data.result
-        })
-        toast.success('Test passed! Function is working correctly.')
+        const result = { success: true, response: data.result }
+        if (showToast) toast.success('Test passed! Function is working correctly.')
+        return result
       } else {
-        setTestResult({
-          success: false,
-          error: data.detail || data.error || 'Test failed'
-        })
-        toast.error(`Test failed: ${data.detail || data.error || 'Unknown error'}`)
+        const error = data.detail || data.error || 'Test failed'
+        const result = { success: false, error }
+        if (showToast) toast.error(`Test failed: ${error}`)
+        return result
       }
     } catch (err: any) {
-      setTestResult({
-        success: false,
-        error: err.message
-      })
-      toast.error(`Test failed: ${err.message}`)
+      const result = { success: false, error: err.message }
+      if (showToast) toast.error(`Test failed: ${err.message}`)
+      return result
     }
+  }
+
+  const testEndpoint = async () => {
+    if (!endpoint || !selectedFunction) return
+    const result = await runTest(true)
+    setTestResult(result)
   }
 
   // Fetch function metadata when function name changes
