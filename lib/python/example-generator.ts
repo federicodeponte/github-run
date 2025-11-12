@@ -4,6 +4,11 @@
 import type { PythonFunction, PythonParameter } from './parser'
 
 /**
+ * Represents any valid JSON value that can be generated as a parameter example
+ */
+type JSONValue = string | number | boolean | null | JSONValue[] | { [key: string]: JSONValue }
+
+/**
  * Generate a realistic example request payload for a Python function
  *
  * Uses smart heuristics based on:
@@ -88,7 +93,7 @@ export function generateSignature(func: PythonFunction): string {
   return `${asyncPrefix}${func.name}(${params.join(', ')})`
 }
 
-function generateExampleValue(param: PythonParameter): any {
+function generateExampleValue(param: PythonParameter): JSONValue {
   const name = param.name.toLowerCase()
   const type = param.type?.toLowerCase()
 
@@ -128,7 +133,7 @@ function generateExampleValue(param: PythonParameter): any {
   return 'example'
 }
 
-function parseDefaultValue(defaultValue: string): any {
+function parseDefaultValue(defaultValue: string): JSONValue {
   const t = defaultValue.trim()
 
   // String literals
