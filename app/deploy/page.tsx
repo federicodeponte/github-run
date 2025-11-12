@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Github, Loader2, CheckCircle2, XCircle } from "lucide-react"
 import { toast } from "sonner"
+import Link from "next/link"
 import { FilePicker } from "@/components/deploy/FilePicker"
 import { FunctionSelector } from "@/components/deploy/FunctionSelector"
 import { GitHubPATInput } from "@/components/settings/GitHubPATInput"
@@ -262,6 +263,11 @@ export default function DeployPage() {
             <Github className="h-6 w-6" />
             <span className="font-bold text-xl">GitHub Run</span>
           </div>
+          <Link href="/history">
+            <Button variant="outline">
+              View History
+            </Button>
+          </Link>
         </div>
       </header>
 
