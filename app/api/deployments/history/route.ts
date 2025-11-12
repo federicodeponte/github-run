@@ -2,7 +2,28 @@
 // ABOUTME: Returns all deployments with optional filtering and pagination
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
+import type { Database } from '@/lib/types/database'
+
+/**
+ * Deployment history insert schema
+ * Validates request body for POST endpoint
+ */
+const deploymentHistorySchema = z.object({
+  github_url: z.string().min(1),
+  file_path: z.string().min(1),
+  function_name: z.string().min(1),
+  endpoint: z.string().url(),
+  deployment_id: z.string().min(1),
+  status: z.enum(['success', 'error']),
+  error_message: z.string().nullable().optional(),
+  test_success: z.boolean().nullable().optional(),
+  test_response: z.unknown().nullable().optional(),
+  test_error: z.string().nullable().optional(),
+})
+
+type DeploymentHistoryInsert = Database['public']['Tables']['deployment_history']['Insert']
 
 /**
  * GET /api/deployments/history
@@ -87,39 +108,53 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
-    const body = await request.json()
+    const body = await request.json() as unknown
 
-    // Validate required fields
-    const requiredFields = ['github_url', 'file_path', 'function_name', 'endpoint', 'deployment_id', 'status']
-    const missingFields = requiredFields.filter(field => !body[field])
+    // Validate request body with Zod
+    const validation = deploymentHistorySchema.safeParse(body)
 
-    if (missingFields.length > 0) {
+    if (!validation.success) {
       return NextResponse.json(
         {
           success: false,
-          error: `Missing required fields: ${missingFields.join(', ')}`,
+          error: 'Invalid request body',
+          details: validation.error.issues[0].message,
         },
         { status: 400 }
       )
     }
 
+    const validatedData = validation.data
+
+    // Build insert object with proper null handling
+    // Using satisfies to ensure type safety
+    const insertData = {
+      github_url: validatedData.github_url,
+      file_path: validatedData.file_path,
+      function_name: validatedData.function_name,
+      endpoint: validatedData.endpoint,
+      deployment_id: validatedData.deployment_id,
+      status: validatedData.status,
+      error_message: validatedData.error_message ?? null,
+      test_success: validatedData.test_success ?? null,
+      test_response: (validatedData.test_response ?? null) as Database['public']['Tables']['deployment_history']['Insert']['test_response'],
+      test_error: validatedData.test_error ?? null,
+    } satisfies DeploymentHistoryInsert
+
     // Insert deployment record
-    const { data, error } = await supabase
+    // Using type-safe workaround for Supabase's type inference issues with Next.js async components
+    // insertData is validated via Zod and satisfies DeploymentHistoryInsert, making this type assertion safe
+    const insertQuery = supabase
       .from('deployment_history')
-      .insert({
-        github_url: body.github_url as string,
-        file_path: body.file_path as string,
-        function_name: body.function_name as string,
-        endpoint: body.endpoint as string,
-        deployment_id: body.deployment_id as string,
-        status: body.status as 'success' | 'error',
-        error_message: body.error_message || null,
-        test_success: body.test_success || null,
-        test_response: body.test_response || null,
-        test_error: body.test_error || null,
-      } as any)
+      // @ts-ignore - Supabase type inference issue with async server components
+      .insert(insertData)
       .select()
       .single()
+
+    const { data, error } = await (insertQuery as unknown as Promise<{
+      data: Database['public']['Tables']['deployment_history']['Row'] | null
+      error: Error | null
+    }>)
 
     if (error) {
       console.error('Supabase insert error:', error)

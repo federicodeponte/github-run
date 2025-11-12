@@ -149,9 +149,14 @@ export const sanitizeEnvVars = (envVars: Record<string, string>): Record<string,
  */
 export const MAX_PAYLOAD_SIZE = 1024 * 1024 // 1MB
 
-export const validatePayloadSize = (data: any): boolean => {
-  const jsonString = JSON.stringify(data)
-  return jsonString.length <= MAX_PAYLOAD_SIZE
+export const validatePayloadSize = (data: unknown): boolean => {
+  try {
+    const jsonString = JSON.stringify(data)
+    return jsonString.length <= MAX_PAYLOAD_SIZE
+  } catch {
+    // If data cannot be stringified, reject it
+    return false
+  }
 }
 
 /**

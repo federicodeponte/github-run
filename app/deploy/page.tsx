@@ -17,9 +17,23 @@ import type { PythonFunction } from "@/lib/python/parser"
 
 type DeployStatus = 'idle' | 'fetching' | 'deploying' | 'testing' | 'success' | 'error'
 
+/**
+ * API Response from /api/deploy endpoint
+ */
+interface DeployApiResponse {
+  success: boolean
+  endpoint?: string
+  deploymentId?: string
+  code?: string
+  error?: string
+}
+
+/**
+ * Test result from endpoint validation
+ */
 interface TestResult {
   success: boolean
-  response?: any
+  response?: unknown
   error?: string
 }
 
@@ -55,7 +69,7 @@ export default function DeployPage() {
     setEndpoint('')
     setTestResult(null)
 
-    let data: any = null
+    let data: DeployApiResponse | null = null
 
     try {
       // Get GitHub token from storage
@@ -92,10 +106,14 @@ export default function DeployPage() {
         })
       })
 
-      data = await response.json()
+      data = await response.json() as DeployApiResponse
 
-      if (!response.ok) {
+      if (!response.ok || !data.success) {
         throw new Error(data.error || 'Deployment failed')
+      }
+
+      if (!data.endpoint || !data.deploymentId) {
+        throw new Error('Invalid response: missing endpoint or deploymentId')
       }
 
       const deployedEndpoint = data.endpoint
@@ -141,15 +159,16 @@ export default function DeployPage() {
       } else {
         toast.warning('Deployment succeeded but automated test failed. Check the error below.')
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred'
       setStatus('error')
-      setError(err.message)
-      toast.error(err.message)
+      setError(errorMessage)
+      toast.error(errorMessage)
       setTestResult(null)
 
       // Save failed deployment if we have deployment ID
       if (data?.deploymentId && data?.endpoint) {
-        await saveDeployment(data.deploymentId, data.endpoint, 'error', null, err.message)
+        await saveDeployment(data.deploymentId, data.endpoint, 'error', null, errorMessage)
       }
     }
   }
@@ -215,9 +234,10 @@ export default function DeployPage() {
         if (showToast) toast.error(`Test failed: ${error}`)
         return result
       }
-    } catch (err: any) {
-      const result = { success: false, error: err.message }
-      if (showToast) toast.error(`Test failed: ${err.message}`)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error during test'
+      const result = { success: false, error: errorMessage }
+      if (showToast) toast.error(`Test failed: ${errorMessage}`)
       return result
     }
   }
@@ -405,7 +425,7 @@ export default function DeployPage() {
                         </>
                       )}
                     </div>
-                    {testResult.success && testResult.response && (
+                    {testResult.success && testResult.response !== undefined && (
                       <div className="mt-2">
                         <p className="text-xs font-medium text-muted-foreground mb-1">Response:</p>
                         <pre className="text-xs bg-background p-2 rounded overflow-x-auto">
