@@ -119,7 +119,8 @@ function generateExampleValue(param: PythonParameter): any {
       bool: true, boolean: true,
       dict: {}, list: [],
     }
-    if (typeDefaults[type]) return typeDefaults[type]
+    // Use 'in' operator to properly check for key existence (handles falsy values like 0)
+    if (type in typeDefaults) return typeDefaults[type]
     if (type.startsWith('dict[')) return {}
     if (type.startsWith('list[')) return []
   }

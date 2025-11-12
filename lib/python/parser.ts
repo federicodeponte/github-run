@@ -83,34 +83,53 @@ export function extractPythonFunctions(code: string): PythonFunction[] {
       continue
     }
 
-    // Match function definitions
-    // Regex explanation:
-    // ^(\s*)           - Capture leading whitespace (indentation)
-    // (async\s+)?      - Optional 'async' keyword
-    // def\s+           - 'def' keyword followed by whitespace
-    // ([a-zA-Z_]\w*)   - Function name (valid Python identifier)
-    // \s*\(            - Opening parenthesis
-    // ([^)]*?)         - Parameters (non-greedy, anything except closing paren)
-    // \)\s*            - Closing parenthesis
-    // (?:->.*?)?       - Optional return type annotation
-    // :                - Colon at end
-    const functionMatch = line.match(/^(\s*)(async\s+)?def\s+([a-zA-Z_]\w*)\s*\(([^)]*?)\)\s*(?:->.*?)?:/)
+    // Check if this line starts a function definition
+    const defMatch = line.match(/^(\s*)(async\s+)?def\s+([a-zA-Z_]\w*)\s*\(/)
+    if (defMatch) {
+      const [, indentation, asyncKeyword, functionName] = defMatch
 
-    if (functionMatch) {
-      const [, indentation, asyncKeyword, functionName, params] = functionMatch
-
-      // Only extract top-level functions (no indentation or minimal indentation)
-      // This excludes nested functions and class methods
+      // Only process top-level functions (no indentation or minimal indentation)
       if (indentation.length === 0 || indentation.length <= 4) {
-        const parameters = parseParameters(params)
+        // Accumulate lines until we find the closing parenthesis and colon
+        let accumulatedLine = line
+        let j = i
 
-        functions.push({
-          name: functionName,
-          parameters,
-          isAsync: Boolean(asyncKeyword),
-          hasDecorators: currentDecorators.length > 0,
-          lineNumber: i + 1,
-        })
+        // Keep accumulating while we haven't found `)` followed by optional `->` and `:`
+        while (j < lines.length && !accumulatedLine.match(/\)\s*(?:->.*?)?:/)) {
+          j++
+          if (j < lines.length) {
+            accumulatedLine += ' ' + lines[j].trim()
+          }
+        }
+
+        // Now try to match the complete function signature
+        // Regex explanation:
+        // ^(\s*)           - Capture leading whitespace (indentation)
+        // (async\s+)?      - Optional 'async' keyword
+        // def\s+           - 'def' keyword followed by whitespace
+        // ([a-zA-Z_]\w*)   - Function name (valid Python identifier)
+        // \s*\(            - Opening parenthesis
+        // (.*?)            - Parameters (non-greedy, can span lines after accumulation)
+        // \)\s*            - Closing parenthesis
+        // (?:->.*?)?       - Optional return type annotation
+        // :                - Colon at end
+        const functionMatch = accumulatedLine.match(/^(\s*)(async\s+)?def\s+([a-zA-Z_]\w*)\s*\((.*?)\)\s*(?:->.*?)?:/)
+
+        if (functionMatch) {
+          const params = functionMatch[4]
+          const parameters = parseParameters(params)
+
+          functions.push({
+            name: functionName,
+            parameters,
+            isAsync: Boolean(asyncKeyword),
+            hasDecorators: currentDecorators.length > 0,
+            lineNumber: i + 1,
+          })
+
+          // Skip the lines we've already processed
+          i = j
+        }
       }
 
       // Reset decorators after processing function
