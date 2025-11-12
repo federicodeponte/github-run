@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { createGitHubClient } from '@/lib/github/client'
 import { parseGitHubError } from '@/lib/github/errors'
 import { extractPythonFunctions, suggestDefaultFunction } from '@/lib/python/parser'
+import { checkRateLimit, getClientIp, RateLimits } from '@/lib/security/rate-limit'
 
 /**
  * Request validation schema
@@ -36,6 +37,20 @@ function parseGitHubUrl(url: string): { owner: string; repo: string } {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting check
+    const clientIp = getClientIp(request)
+    const rateLimit = checkRateLimit(clientIp, RateLimits.LISTING)
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: rateLimit.message,
+        },
+        { status: 429 }
+      )
+    }
+
     // Validate request body
     const body = await request.json()
     const validation = requestSchema.safeParse(body)

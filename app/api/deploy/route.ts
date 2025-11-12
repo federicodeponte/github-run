@@ -1,20 +1,28 @@
 // ABOUTME: API endpoint for deploying Python functions from GitHub to Modal
-// ABOUTME: Refactored to use centralized GitHub client (DRY principle)
+// ABOUTME: Includes rate limiting and enhanced security validation
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createGitHubClient } from '@/lib/github/client'
 import { parseGitHubError } from '@/lib/github/errors'
+import { checkRateLimit, getClientIp, RateLimits } from '@/lib/security/rate-limit'
+import {
+  githubUrlSchema,
+  filePathSchema,
+  functionNameSchema,
+  envVarsSchema,
+  validatePayloadSize,
+} from '@/lib/security/validation'
 
 /**
- * Request validation schema
+ * Enhanced request validation schema with strict security checks
  */
 const deployRequestSchema = z.object({
-  githubUrl: z.string().url('Invalid GitHub URL'),
-  filePath: z.string().min(1, 'File path is required').regex(/\.py$/, 'File must be a Python file (.py)'),
-  functionName: z.string().min(1, 'Function name is required').regex(/^[a-zA-Z_]\w*$/, 'Invalid function name'),
+  githubUrl: githubUrlSchema,
+  filePath: filePathSchema,
+  functionName: functionNameSchema,
   token: z.string().optional(),
-  envVars: z.record(z.string(), z.string()).optional(),
+  envVars: envVarsSchema,
 })
 
 /**
@@ -76,8 +84,43 @@ async function deployToModal(
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting check
+    const clientIp = getClientIp(request)
+    const rateLimit = checkRateLimit(clientIp, RateLimits.DEPLOYMENT)
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: rateLimit.message,
+          retryAfter: Math.ceil((rateLimit.resetTime - Date.now()) / 1000),
+        },
+        {
+          status: 429,
+          headers: {
+            'X-RateLimit-Limit': String(RateLimits.DEPLOYMENT.max),
+            'X-RateLimit-Remaining': String(rateLimit.remaining),
+            'X-RateLimit-Reset': String(rateLimit.resetTime),
+            'Retry-After': String(Math.ceil((rateLimit.resetTime - Date.now()) / 1000)),
+          },
+        }
+      )
+    }
+
     // Validate request body
     const body = await request.json()
+
+    // Check payload size
+    if (!validatePayloadSize(body)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Request payload too large. Maximum size is 1MB.',
+        },
+        { status: 413 }
+      )
+    }
+
     const validation = deployRequestSchema.safeParse(body)
 
     if (!validation.success) {
