@@ -9,6 +9,7 @@ import { toast } from "sonner"
 import { FilePicker } from "@/components/deploy/FilePicker"
 import { FunctionSelector } from "@/components/deploy/FunctionSelector"
 import { GitHubPATInput } from "@/components/settings/GitHubPATInput"
+import { DeploymentProgress } from "@/components/deploy/DeploymentProgress"
 import { getGitHubToken } from "@/lib/storage/settings"
 import { generateExampleRequest, generateCurlExample } from "@/lib/python/example-generator"
 import type { PythonFunction } from "@/lib/python/parser"
@@ -304,6 +305,15 @@ export default function DeployPage() {
             </CardContent>
           </Card>
 
+          {/* Progress Indicator */}
+          {(status === 'fetching' || status === 'deploying' || status === 'testing' || status === 'success') && (
+            <Card>
+              <CardContent className="pt-6">
+                <DeploymentProgress status={status} />
+              </CardContent>
+            </Card>
+          )}
+
           {status === 'success' && endpoint && (
             <Card className="border-green-500/50 bg-green-500/5">
               <CardHeader>
@@ -379,7 +389,22 @@ export default function DeployPage() {
                 </div>
 
                 <div className="bg-muted p-4 rounded-lg space-y-2">
-                  <p className="text-sm font-medium">Example cURL Request:</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium">Example cURL Request:</p>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        const curlCmd = selectedFunction
+                          ? generateCurlExample(endpoint, selectedFunction)
+                          : `curl -X POST ${endpoint} \\\n  -H "Content-Type: application/json" \\\n  -d '{}'`
+                        navigator.clipboard.writeText(curlCmd)
+                        toast.success('cURL command copied!')
+                      }}
+                    >
+                      Copy
+                    </Button>
+                  </div>
                   <pre className="text-xs overflow-x-auto">
                     {selectedFunction
                       ? generateCurlExample(endpoint, selectedFunction)
@@ -400,8 +425,48 @@ export default function DeployPage() {
                   Deployment Failed
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-red-600">{error}</p>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-red-600 font-medium">{error}</p>
+
+                {/* Recovery suggestions */}
+                <div className="bg-background p-4 rounded-lg space-y-2">
+                  <p className="text-sm font-medium">💡 Troubleshooting Tips:</p>
+                  <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                    {error.includes('404') || error.includes('not found') ? (
+                      <>
+                        <li>Check that the GitHub repository URL is correct</li>
+                        <li>Verify the file path exists in the repository</li>
+                        <li>For private repos, ensure your GitHub token has access</li>
+                      </>
+                    ) : error.includes('Authentication') || error.includes('401') ? (
+                      <>
+                        <li>Add a GitHub Personal Access Token above</li>
+                        <li>Ensure your token has 'repo' scope permissions</li>
+                        <li>Check that the token hasn't expired</li>
+                      </>
+                    ) : error.includes('rate limit') ? (
+                      <>
+                        <li>GitHub API rate limit reached</li>
+                        <li>Add a GitHub token to increase your rate limit</li>
+                        <li>Wait a few minutes and try again</li>
+                      </>
+                    ) : (
+                      <>
+                        <li>Check that your function returns a JSON-serializable value</li>
+                        <li>Verify the function has no syntax errors</li>
+                        <li>Try deploying a simpler function first to test</li>
+                      </>
+                    )}
+                  </ul>
+                </div>
+
+                <Button
+                  variant="outline"
+                  onClick={() => setStatus('idle')}
+                  className="w-full"
+                >
+                  Try Again
+                </Button>
               </CardContent>
             </Card>
           )}
