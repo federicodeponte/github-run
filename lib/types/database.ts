@@ -146,6 +146,50 @@ export interface Database {
           last_used_at?: string | null
         }
       }
+      deployment_history: {
+        Row: {
+          id: string
+          created_at: string
+          github_url: string
+          file_path: string
+          function_name: string
+          endpoint: string
+          deployment_id: string
+          status: 'success' | 'error'
+          error_message: string | null
+          test_success: boolean | null
+          test_response: Json | null
+          test_error: string | null
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          github_url: string
+          file_path: string
+          function_name: string
+          endpoint: string
+          deployment_id: string
+          status: 'success' | 'error'
+          error_message?: string | null
+          test_success?: boolean | null
+          test_response?: Json | null
+          test_error?: string | null
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          github_url?: string
+          file_path?: string
+          function_name?: string
+          endpoint?: string
+          deployment_id?: string
+          status?: 'success' | 'error'
+          error_message?: string | null
+          test_success?: boolean | null
+          test_response?: Json | null
+          test_error?: string | null
+        }
+      }
     }
   }
 }

@@ -54,6 +54,8 @@ export default function DeployPage() {
     setEndpoint('')
     setTestResult(null)
 
+    let data: any = null
+
     try {
       // Get GitHub token from storage
       const token = getGitHubToken()
@@ -89,7 +91,7 @@ export default function DeployPage() {
         })
       })
 
-      const data = await response.json()
+      data = await response.json()
 
       if (!response.ok) {
         throw new Error(data.error || 'Deployment failed')
@@ -130,6 +132,9 @@ export default function DeployPage() {
       setTestResult(testResult!)
       setStatus('success')
 
+      // Save deployment to history
+      await saveDeployment(data.deploymentId, deployedEndpoint, 'success', testResult!)
+
       if (testResult!.success) {
         toast.success('Deployment verified! Endpoint is working correctly.')
       } else {
@@ -140,6 +145,41 @@ export default function DeployPage() {
       setError(err.message)
       toast.error(err.message)
       setTestResult(null)
+
+      // Save failed deployment if we have deployment ID
+      if (data?.deploymentId && data?.endpoint) {
+        await saveDeployment(data.deploymentId, data.endpoint, 'error', null, err.message)
+      }
+    }
+  }
+
+  const saveDeployment = async (
+    deploymentId: string,
+    deployedEndpoint: string,
+    status: 'success' | 'error',
+    testResult?: TestResult | null,
+    errorMessage?: string
+  ) => {
+    try {
+      await fetch('/api/deployments/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          github_url: githubUrl,
+          file_path: filePath,
+          function_name: functionName,
+          endpoint: deployedEndpoint,
+          deployment_id: deploymentId,
+          status,
+          error_message: errorMessage || null,
+          test_success: testResult?.success || null,
+          test_response: testResult?.response || null,
+          test_error: testResult?.error || null,
+        }),
+      })
+      // Silently fail - don't interrupt user flow if saving fails
+    } catch (error) {
+      console.error('Failed to save deployment history:', error)
     }
   }
 
