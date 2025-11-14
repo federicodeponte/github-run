@@ -11,8 +11,14 @@ export const validateGitHubUrl = (url: string): boolean => {
   try {
     const parsed = new URL(url)
 
-    // Only allow github.com
-    if (parsed.hostname !== 'github.com') {
+    // Only allow github.com (case-insensitive per RFC 3986)
+    if (parsed.hostname.toLowerCase() !== 'github.com') {
+      return false
+    }
+
+    // Reject URLs with query parameters or hash fragments
+    // Repository URLs should be clean: https://github.com/owner/repo
+    if (parsed.search || parsed.hash) {
       return false
     }
 
