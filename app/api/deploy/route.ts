@@ -27,15 +27,21 @@ const deployRequestSchema = z.object({
 
 /**
  * Parse GitHub URL to extract owner and repo
+ * Uses URL() for consistent parsing with validation
  */
 function parseGitHubUrl(url: string): { owner: string; repo: string } {
-  const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)/)
-  if (!match) {
+  try {
+    const parsed = new URL(url)
+    const pathMatch = parsed.pathname.match(/^\/([^\/]+)\/([^\/]+)\/?$/)
+    if (!pathMatch) {
+      throw new Error('Invalid GitHub URL format. Expected: https://github.com/owner/repo')
+    }
+    return {
+      owner: pathMatch[1],
+      repo: pathMatch[2].replace('.git', ''),
+    }
+  } catch (error) {
     throw new Error('Invalid GitHub URL format. Expected: https://github.com/owner/repo')
-  }
-  return {
-    owner: match[1],
-    repo: match[2].replace('.git', ''),
   }
 }
 
@@ -79,6 +85,26 @@ async function deployToModal(
 }
 
 /**
+ * GET /api/deploy
+ * Return 405 Method Not Allowed - this endpoint only accepts POST requests
+ */
+export async function GET() {
+  return NextResponse.json(
+    {
+      success: false,
+      error: 'Method not allowed. Use POST to deploy a function.',
+      allowedMethods: ['POST'],
+    },
+    {
+      status: 405,
+      headers: {
+        Allow: 'POST',
+      },
+    }
+  )
+}
+
+/**
  * POST /api/deploy
  * Deploy a Python function from GitHub to Modal
  */
@@ -107,8 +133,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate request body
-    const body = await request.json()
+    // Parse and validate request body
+    let body
+    try {
+      body = await request.json()
+    } catch (error) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Invalid JSON in request body',
+        },
+        { status: 400 }
+      )
+    }
 
     // Check payload size
     if (!validatePayloadSize(body)) {
@@ -166,4 +203,64 @@ export async function POST(request: NextRequest) {
       { status: githubError.statusCode || 500 }
     )
   }
+}
+
+/**
+ * PUT /api/deploy
+ * Return 405 Method Not Allowed
+ */
+export async function PUT() {
+  return NextResponse.json(
+    {
+      success: false,
+      error: 'Method not allowed. Use POST to deploy a function.',
+      allowedMethods: ['GET', 'POST'],
+    },
+    {
+      status: 405,
+      headers: {
+        Allow: 'GET, POST',
+      },
+    }
+  )
+}
+
+/**
+ * DELETE /api/deploy
+ * Return 405 Method Not Allowed
+ */
+export async function DELETE() {
+  return NextResponse.json(
+    {
+      success: false,
+      error: 'Method not allowed. Use POST to deploy a function.',
+      allowedMethods: ['GET', 'POST'],
+    },
+    {
+      status: 405,
+      headers: {
+        Allow: 'GET, POST',
+      },
+    }
+  )
+}
+
+/**
+ * PATCH /api/deploy
+ * Return 405 Method Not Allowed
+ */
+export async function PATCH() {
+  return NextResponse.json(
+    {
+      success: false,
+      error: 'Method not allowed. Use POST to deploy a function.',
+      allowedMethods: ['GET', 'POST'],
+    },
+    {
+      status: 405,
+      headers: {
+        Allow: 'GET, POST',
+      },
+    }
+  )
 }

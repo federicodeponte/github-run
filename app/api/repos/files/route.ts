@@ -6,33 +6,60 @@ import { z } from 'zod'
 import { createGitHubClient } from '@/lib/github/client'
 import { GitHubAuthError, GitHubNotFoundError, parseGitHubError } from '@/lib/github/errors'
 import { checkRateLimit, getClientIp, RateLimits } from '@/lib/security/rate-limit'
+import { githubUrlSchema } from '@/lib/security/validation'
 
 /**
  * Request validation schema
  * Using Zod for runtime type safety
  */
 const requestSchema = z.object({
-  githubUrl: z.string().url('Invalid GitHub URL'),
+  githubUrl: githubUrlSchema,
   token: z.string().optional(),
   branch: z.string().optional(),
 })
 
 /**
  * Parse GitHub URL to extract owner and repo
+ * Uses URL() for consistent parsing with validation
  */
 function parseGitHubUrl(url: string): { owner: string; repo: string } {
-  const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)/)
-  if (!match) {
+  try {
+    const parsed = new URL(url)
+    const pathMatch = parsed.pathname.match(/^\/([^\/]+)\/([^\/]+)\/?$/)
+    if (!pathMatch) {
+      throw new Error('Invalid GitHub URL format. Expected: https://github.com/owner/repo')
+    }
+    return {
+      owner: pathMatch[1],
+      repo: pathMatch[2].replace('.git', ''),
+    }
+  } catch (error) {
     throw new Error('Invalid GitHub URL format. Expected: https://github.com/owner/repo')
-  }
-  return {
-    owner: match[1],
-    repo: match[2].replace('.git', ''),
   }
 }
 
 /**
  * GET /api/repos/files
+ * Return 405 Method Not Allowed - this endpoint only accepts POST requests
+ */
+export async function GET() {
+  return NextResponse.json(
+    {
+      success: false,
+      error: 'Method not allowed. Use POST to list repository files.',
+      allowedMethods: ['POST'],
+    },
+    {
+      status: 405,
+      headers: {
+        Allow: 'POST',
+      },
+    }
+  )
+}
+
+/**
+ * POST /api/repos/files
  * Discover all Python files in a repository
  */
 export async function POST(request: NextRequest) {
@@ -51,8 +78,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate request body
-    const body = await request.json()
+    // Parse and validate request body
+    let body
+    try {
+      body = await request.json()
+    } catch (error) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Invalid JSON in request body',
+        },
+        { status: 400 }
+      )
+    }
     const validation = requestSchema.safeParse(body)
 
     if (!validation.success) {
@@ -118,4 +156,64 @@ export async function POST(request: NextRequest) {
       { status: githubError.statusCode || 500 }
     )
   }
+}
+
+/**
+ * PUT /api/repos/files
+ * Return 405 Method Not Allowed
+ */
+export async function PUT() {
+  return NextResponse.json(
+    {
+      success: false,
+      error: 'Method not allowed. Use POST to list repository files.',
+      allowedMethods: ['GET', 'POST'],
+    },
+    {
+      status: 405,
+      headers: {
+        Allow: 'GET, POST',
+      },
+    }
+  )
+}
+
+/**
+ * DELETE /api/repos/files
+ * Return 405 Method Not Allowed
+ */
+export async function DELETE() {
+  return NextResponse.json(
+    {
+      success: false,
+      error: 'Method not allowed. Use POST to list repository files.',
+      allowedMethods: ['GET', 'POST'],
+    },
+    {
+      status: 405,
+      headers: {
+        Allow: 'GET, POST',
+      },
+    }
+  )
+}
+
+/**
+ * PATCH /api/repos/files
+ * Return 405 Method Not Allowed
+ */
+export async function PATCH() {
+  return NextResponse.json(
+    {
+      success: false,
+      error: 'Method not allowed. Use POST to list repository files.',
+      allowedMethods: ['GET', 'POST'],
+    },
+    {
+      status: 405,
+      headers: {
+        Allow: 'GET, POST',
+      },
+    }
+  )
 }
