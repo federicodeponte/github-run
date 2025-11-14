@@ -283,11 +283,14 @@ export default function DeployPage() {
             <Github className="h-6 w-6" />
             <span className="font-bold text-xl">GitHub Run</span>
           </div>
-          <Link href="/history">
-            <Button variant="outline">
-              View History
-            </Button>
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/history">
+              <Button variant="outline">History</Button>
+            </Link>
+            <Link href="/analytics">
+              <Button variant="outline">Analytics</Button>
+            </Link>
+          </div>
         </div>
       </header>
 
