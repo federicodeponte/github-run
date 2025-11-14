@@ -151,9 +151,6 @@ export default function DeployPage() {
       setTestResult(testResult!)
       setStatus('success')
 
-      // Save deployment to history
-      await saveDeployment(data.deploymentId, deployedEndpoint, 'success', testResult!)
-
       if (testResult!.success) {
         toast.success('Deployment verified! Endpoint is working correctly.')
       } else {
@@ -165,41 +162,6 @@ export default function DeployPage() {
       setError(errorMessage)
       toast.error(errorMessage)
       setTestResult(null)
-
-      // Save failed deployment if we have deployment ID
-      if (data?.deploymentId && data?.endpoint) {
-        await saveDeployment(data.deploymentId, data.endpoint, 'error', null, errorMessage)
-      }
-    }
-  }
-
-  const saveDeployment = async (
-    deploymentId: string,
-    deployedEndpoint: string,
-    status: 'success' | 'error',
-    testResult?: TestResult | null,
-    errorMessage?: string
-  ) => {
-    try {
-      await fetch('/api/deployments/history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          github_url: githubUrl,
-          file_path: filePath,
-          function_name: functionName,
-          endpoint: deployedEndpoint,
-          deployment_id: deploymentId,
-          status,
-          error_message: errorMessage || null,
-          test_success: testResult?.success || null,
-          test_response: testResult?.response || null,
-          test_error: testResult?.error || null,
-        }),
-      })
-      // Silently fail - don't interrupt user flow if saving fails
-    } catch (error) {
-      console.error('Failed to save deployment history:', error)
     }
   }
 
@@ -282,14 +244,6 @@ export default function DeployPage() {
           <div className="flex items-center gap-2">
             <Github className="h-6 w-6" />
             <span className="font-bold text-xl">GitHub Run</span>
-          </div>
-          <div className="flex gap-2">
-            <Link href="/history">
-              <Button variant="outline">History</Button>
-            </Link>
-            <Link href="/analytics">
-              <Button variant="outline">Analytics</Button>
-            </Link>
           </div>
         </div>
       </header>
